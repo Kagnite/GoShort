@@ -92,6 +92,7 @@ deploy_prod:
   image: alpine:3.22.2
   tags:
     - vps-runner
+
   variables:
     SSH_PORT: "8787"
 
@@ -105,21 +106,20 @@ deploy_prod:
 
   script:
     - echo "Deploying to $SERVER_IP..."
-    
-    # Main deployment logic over SSH
+
     - |
       ssh -p $SSH_PORT kagnite@$SERVER_IP "
         set -e
-        
-        # Login using GitLab CI variables
-        echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+
+        # Login using DEPLOY TOKEN (not CI job token)
+        echo $REGISTRY_DEPLOY_TOKEN | docker login registry.gitlab.com -u $REGISTRY_DEPLOY_USER --password-stdin
 
         docker pull $IMAGE_NAME:$TAG_LATEST
 
         docker stop goshort_app || true
         docker rm goshort_app || true
 
-        docker image prune -af --filter 'label!=keep'
+        docker image prune -af
 
         docker run -d \
           --name goshort_app \
@@ -132,23 +132,27 @@ deploy_prod:
           $IMAGE_NAME:$TAG_LATEST
       "
 
-    - sleep 10
+    # Give container time to start
+    - sleep 12
 
-    # Post-deployment verification
+    # Correct health check (HOST SIDE)
     - |
       ssh -p $SSH_PORT kagnite@$SERVER_IP "
         if ! docker ps | grep -q goshort_app; then
-          echo 'Container failed to start'
+          echo 'Container failed to run'
           exit 1
         fi
-        curl --fail --max-time 10 http://localhost:8080/ || exit 1
+
+        # Correct port on Host
+        curl --fail --max-time 10 http://localhost/ || exit 1
       "
 
-    - echo "Deployment successful!"
+    - echo 'Deployment successful!'
 
   environment:
     name: production
     url: http://$SERVER_IP
+
   only:
     - main
 
