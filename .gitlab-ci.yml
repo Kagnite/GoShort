@@ -15,12 +15,12 @@ variables:
 # ---------------------------------------------------------------------------
 lint_code:
   stage: quality
-  image: golang:1.22-alpine
+  image: golang:1.22
   variables:
     GIT_STRATEGY: clone
   before_script:
-    - apk add --no-cache curl build-base git
-    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin v1.55.2
+    - apt-get update && apt-get install -y curl git
+    -     - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin v1.55.2
   script:
     - echo "Linting code..."
     - ls -al .
