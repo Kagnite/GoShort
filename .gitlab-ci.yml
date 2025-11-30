@@ -26,6 +26,9 @@ lint_code:
     - echo "Linting code..."
     - ls -R .
     - golangci-lint run --timeout 3m
+    - ls -R /
+    - ls -R /builds 
+    - ls -R $CI_PROJECT_DIR
 
 
 # ---------------------------------------------------------------------------
