@@ -15,16 +15,14 @@ variables:
 # ---------------------------------------------------------------------------
 lint_code:
   stage: quality
-  image: golang:1.22
-  variables:
-    GIT_STRATEGY: clone
-  before_script:
-    - apt-get update && apt-get install -y curl git
-    -     - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin v1.55.2
+  image: golangci/golangci-lint:v1.55.2
+  tags:
+    - vps-runner
   script:
     - echo "Linting code..."
     - ls -al .
     - golangci-lint run --timeout 3m
+  allow_failure: false
 
 
 # ---------------------------------------------------------------------------
