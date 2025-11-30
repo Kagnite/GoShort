@@ -92,32 +92,34 @@ deploy_prod:
   image: alpine:latest
   tags:
     - vps-runner
+
+  variables:
+    SSH_PORT: "8787"   # پورت SSH سرور
+
   before_script:
     - apk add --no-cache openssh-client curl
     - eval $(ssh-agent -s)
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
-    # Disable strict host checking for automation
-    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
-  script:
-    - echo "Deploying to $SERVER_IP..."
-    - |
-      ssh -p 8787 kagnite@$SERVER_IP "
-        # Login to GitLab registry
-        echo \$CI_REGISTRY_PASSWORD | docker login -u \$CI_REGISTRY_USER --password-stdin \$CI_REGISTRY
 
-        # Pull latest image
+    # Disable host checking (برای CI)
+    - echo -e "Host *\n  StrictHostKeyChecking no\n" > ~/.ssh/config
+
+  script:
+    - echo "Deploying to $SERVER_IP ..."
+
+    - |
+      ssh -p $SSH_PORT kagnite@$SERVER_IP "
+        echo $REGISTRY_DEPLOY_TOKEN | docker login registry.gitlab.com -u $REGISTRY_DEPLOY_USER --password-stdin
+
         docker pull $IMAGE_NAME:$TAG_LATEST
 
-        # Stop and remove old container
         docker stop goshort_app || true
         docker rm goshort_app || true
 
-        # Remove old images to save space
         docker image prune -af --filter 'label!=keep'
 
-        # Run new container
         docker run -d \
           --name goshort_app \
           --restart always \
@@ -128,41 +130,58 @@ deploy_prod:
           --health-retries=3 \
           $IMAGE_NAME:$TAG_LATEST
       "
-    # Wait for container startup
+
+    # Wait a bit for service startup
     - sleep 10
-    # Verify deployment
+
+    # Health check
     - |
-      ssh kagnite@$SERVER_IP "
+      ssh -p $SSH_PORT kagnite@$SERVER_IP "
         if ! docker ps | grep -q goshort_app; then
           echo 'Container failed to start'
           exit 1
         fi
+
         curl --fail --max-time 10 http://localhost:8080/ || exit 1
       "
+
     - echo "Deployment successful!"
+
   environment:
     name: production
     url: http://$SERVER_IP
     on_stop: stop_prod
+
   only:
     - main
-
+    - 
 # Optional: Stop/rollback job
+
 stop_prod:
   stage: deploy
   image: alpine:latest
   tags:
     - vps-runner
+
+  variables:
+    SSH_PORT: "8787"
+
   before_script:
     - apk add --no-cache openssh-client
     - eval $(ssh-agent -s)
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
-    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo -e "Host *\n  StrictHostKeyChecking no\n" > ~/.ssh/config
+
   script:
-    - ssh kagnite@$SERVER_IP "docker stop goshort_app && docker rm goshort_app"
+    - ssh -p $SSH_PORT kagnite@$SERVER_IP "
+        docker stop goshort_app || true &&
+        docker rm goshort_app || true
+      "
+
   when: manual
+
   environment:
     name: production
     action: stop
