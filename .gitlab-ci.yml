@@ -30,12 +30,17 @@ lint_code:
 # ---------------------------------------------------------------------------
 security_scan:
   stage: security
-  image: securego/gosec:latest
+  image: golang:1.23
+  before_script:
+    - echo "Installing gosec..."
+    - go install github.com/securego/gosec/v2/cmd/gosec@latest
   script:
     - echo "Scanning for security vulnerabilities..."
-    # Fail pipeline on high/medium severity issues
-    - gosec -severity medium ./...
+    - $(go env GOPATH)/bin/gosec -severity medium ./...
+  tags:
+    - vps-runner
   allow_failure: false
+
 
 # ---------------------------------------------------------------------------
 # Stage 3: Unit Tests
