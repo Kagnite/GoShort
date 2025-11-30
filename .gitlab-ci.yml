@@ -108,7 +108,7 @@ deploy_prod:
     - echo "Deploying to $SERVER_IP..."
 
     - |
-      ssh -o RequestTTY=no -T -p $SSH_PORT kagnite@$SERVER_IP "
+      ssh -p $SSH_PORT -o RequestTTY=no -T kagnite@$SERVER_IP 'SHLVL=0 sh -c " "
         set -e
 
         # Login using DEPLOY TOKEN (not CI job token)
@@ -137,7 +137,7 @@ deploy_prod:
 
     # Correct health check (HOST SIDE)
     - |
-      ssh -p $SSH_PORT kagnite@$SERVER_IP "
+      ssh -p $SSH_PORT -o RequestTTY=no -T kagnite@$SERVER_IP 'SHLVL=0 sh -c " "
         if ! docker ps | grep -q goshort_app; then
           echo 'Container failed to run'
           exit 1
