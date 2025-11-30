@@ -103,7 +103,7 @@ deploy_prod:
   script:
     - echo "Deploying to $SERVER_IP..."
     - |
-      ssh kagnite@$SERVER_IP "
+      ssh -p 8787 kagnite@$SERVER_IP "
         # Login to GitLab registry
         echo \$CI_REGISTRY_PASSWORD | docker login -u \$CI_REGISTRY_USER --password-stdin \$CI_REGISTRY
 
