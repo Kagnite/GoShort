@@ -15,12 +15,18 @@ variables:
 # ---------------------------------------------------------------------------
 lint_code:
   stage: quality
-  image: golangci/golangci-lint:v1.55.2-alpine
+  image: golang:1.22-alpine
+  variables:
+    GIT_STRATEGY: clone
+  before_script:
+    - apk add --no-cache curl build-base git
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+        sh -s -- -b /usr/local/bin v1.55.2
   script:
     - echo "Linting code..."
-    # Check code standards and formatting
+    - ls -R .
     - golangci-lint run --timeout 3m
-  allow_failure: false
+
 
 # ---------------------------------------------------------------------------
 # Stage 2: Security Scan
