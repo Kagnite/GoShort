@@ -1,0 +1,154 @@
+stages:
+  - quality
+  - security
+  - test
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  TAG_COMMIT: $CI_COMMIT_SHORT_SHA
+  TAG_LATEST: latest
+
+# ---------------------------------------------------------------------------
+# Stage 1: Code Quality
+# ---------------------------------------------------------------------------
+lint_code:
+  stage: quality
+  image: golangci/golangci-lint:v1.55.2-alpine
+  script:
+    - echo "Linting code..."
+    # Check code standards and formatting
+    - golangci-lint run --timeout 3m
+  allow_failure: false
+
+# ---------------------------------------------------------------------------
+# Stage 2: Security Scan
+# ---------------------------------------------------------------------------
+security_scan:
+  stage: security
+  image: securego/gosec:latest
+  script:
+    - echo "Scanning for security vulnerabilities..."
+    # Fail pipeline on high/medium severity issues
+    - gosec -severity medium ./...
+  allow_failure: false
+
+# ---------------------------------------------------------------------------
+# Stage 3: Unit Tests
+# ---------------------------------------------------------------------------
+unit_test:
+  stage: test
+  image: golang:1.22-alpine
+  script:
+    - echo "Running unit tests..."
+    - go test -v -cover ./...
+  coverage: '/coverage: \d+\.\d+%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+# ---------------------------------------------------------------------------
+# Stage 4: Build & Push Docker Image
+# ---------------------------------------------------------------------------
+build_push_docker:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $IMAGE_NAME:$TAG_COMMIT -t $IMAGE_NAME:$TAG_LATEST .
+    - echo "Pushing to GitLab registry..."
+    - docker push $IMAGE_NAME:$TAG_COMMIT
+    - docker push $IMAGE_NAME:$TAG_LATEST
+  only:
+    - main
+    - develop
+
+# ---------------------------------------------------------------------------
+# Stage 5: Deploy to Production VPS
+# ---------------------------------------------------------------------------
+deploy_prod:
+  stage: deploy
+  image: alpine:latest
+  tags:
+    - vps-runner
+  before_script:
+    - apk add --no-cache openssh-client curl
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    # Disable strict host checking for automation
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+  script:
+    - echo "Deploying to $SERVER_IP..."
+    - |
+      ssh kagnite@$SERVER_IP "
+        # Login to GitLab registry
+        echo \$CI_REGISTRY_PASSWORD | docker login -u \$CI_REGISTRY_USER --password-stdin \$CI_REGISTRY
+
+        # Pull latest image
+        docker pull $IMAGE_NAME:$TAG_LATEST
+
+        # Stop and remove old container
+        docker stop goshort_app || true
+        docker rm goshort_app || true
+
+        # Remove old images to save space
+        docker image prune -af --filter 'label!=keep'
+
+        # Run new container
+        docker run -d \
+          --name goshort_app \
+          --restart always \
+          -p 80:8080 \
+          --health-cmd='curl -f http://localhost:8080/ || exit 1' \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          $IMAGE_NAME:$TAG_LATEST
+      "
+    # Wait for container startup
+    - sleep 10
+    # Verify deployment
+    - |
+      ssh kagnite@$SERVER_IP "
+        if ! docker ps | grep -q goshort_app; then
+          echo 'Container failed to start'
+          exit 1
+        fi
+        curl --fail --max-time 10 http://localhost:8080/ || exit 1
+      "
+    - echo "Deployment successful!"
+  environment:
+    name: production
+    url: http://$SERVER_IP
+    on_stop: stop_prod
+  only:
+    - main
+
+# Optional: Stop/rollback job
+stop_prod:
+  stage: deploy
+  image: alpine:latest
+  tags:
+    - vps-runner
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+  script:
+    - ssh kagnite@$SERVER_IP "docker stop goshort_app && docker rm goshort_app"
+  when: manual
+  environment:
+    name: production
+    action: stop
