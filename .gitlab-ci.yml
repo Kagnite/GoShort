@@ -9,7 +9,6 @@ variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
   TAG_COMMIT: $CI_COMMIT_SHORT_SHA
   TAG_LATEST: latest
-  ACTIVE_FILE: "/etc/nginx/upstreams/goshort_active.conf"
 
 # ---------------------------------------------------------
 # Lint
@@ -84,12 +83,12 @@ deploy_prod:
 
   script:
     - |-
-      ssh -p "$SSH_PORT" kagnite@"$SERVER_IP" << 'EOF'
+      ssh -p "$SSH_PORT" kagnite@"$SERVER_IP" <<EOF
       set -e
 
-      ACTIVE=$(basename $(grep -o "808." /etc/nginx/upstreams/goshort_active.conf))
+      ACTIVE=\$(basename \$(grep -o "808." /etc/nginx/upstreams/goshort_active.conf))
 
-      if [ "$ACTIVE" = "8080" ]; then
+      if [ "\$ACTIVE" = "8080" ]; then
           NEW_PORT=8081
           NEW_COLOR=green
       else
@@ -99,13 +98,13 @@ deploy_prod:
 
       docker pull "$IMAGE_NAME:$TAG_LATEST"
 
-      docker stop goshort_$NEW_COLOR || true
-      docker rm goshort_$NEW_COLOR || true
+      docker stop goshort_\$NEW_COLOR || true
+      docker rm goshort_\$NEW_COLOR || true
 
       docker run -d \
-        --name goshort_$NEW_COLOR \
+        --name goshort_\$NEW_COLOR \
         --restart always \
-        -p 127.0.0.1:$NEW_PORT:8080 \
+        -p 127.0.0.1:\$NEW_PORT:8080 \
         --health-cmd='curl -f http://localhost:8080/ || exit 1' \
         --health-interval=5s \
         --health-timeout=3s \
@@ -114,7 +113,7 @@ deploy_prod:
 
       echo "Testing health..."
       for i in 1 2 3 4 5 6; do
-        if curl --fail --silent --max-time 3 http://localhost:$NEW_PORT/ > /dev/null; then
+        if curl --fail --silent --max-time 3 http://localhost:\$NEW_PORT/ > /dev/null; then
           echo "Healthy OK"
           break
         fi
@@ -122,12 +121,12 @@ deploy_prod:
       done
 
       echo "Switching NGINX..."
-      echo "server 127.0.0.1:$NEW_PORT;" | sudo tee /etc/nginx/upstreams/goshort_active.conf
+      echo "server 127.0.0.1:\$NEW_PORT;" | sudo tee /etc/nginx/upstreams/goshort_active.conf
 
       sudo systemctl reload nginx
 
       echo "Deployment done"
-      << EOF
+      EOF
 
   environment:
     name: production
