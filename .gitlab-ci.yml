@@ -59,7 +59,6 @@ security_scan_backend:
   tags: [vps-runner]
   before_script:
     - apk add --no-cache git
-    # Install compatible version with Go 1.23
     - go install github.com/securego/gosec/v2/cmd/gosec@v2.19.0
   script:
     - cd backend
@@ -125,33 +124,69 @@ unit_test_backend:
   image: golang:1.23-alpine
   tags: [vps-runner]
   services:
-    - postgres:15-alpine
-    - redis:7-alpine
+    - name: postgres:15-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
   variables:
     POSTGRES_DB: goshort_test
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: postgres123
+    POSTGRES_HOST_AUTH_METHOD: trust
     DB_HOST: postgres
-    DB_PORT: 5432
+    DB_PORT: "5432"
+    DB_USER: postgres
+    DB_PASSWORD: postgres123
+    DB_NAME: goshort_test
+    DB_SSLMODE: disable
     REDIS_HOST: redis
-    REDIS_PORT: 6379
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: ""
+    CGO_ENABLED: "1"
+    LOG_LEVEL: error
+    ENVIRONMENT: test
   before_script:
+    - apk add --no-cache gcc musl-dev postgresql-client
+    - |
+      echo "Waiting for PostgreSQL..."
+      for i in {1..30}; do
+        if pg_isready -h postgres -U postgres; then
+          echo "PostgreSQL is ready!"
+          break
+        fi
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    - |
+      echo "Waiting for Redis..."
+      for i in {1..30}; do
+        if nc -z redis 6379; then
+          echo "Redis is ready!"
+          break
+        fi
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
     - cd backend
     - go mod download
   script:
     - go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-    - go tool cover -func=coverage.out
+    - go tool cover -func=coverage.out | tail -1
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
         path: backend/coverage.out
+    paths:
+      - backend/coverage.out
     expire_in: 1 week
+    when: always
   only:
     - merge_requests
     - main
     - develop
+  allow_failure: false
 
 # ============================================
 # Frontend Jobs
@@ -308,18 +343,14 @@ deploy_production:
       echo "Starting Blue-Green Deployment"
       echo "=========================================="
       
-      # Navigate to deployment directory
       cd ${DEPLOY_PATH}
       
-      # Login to registry
       echo "${CI_REGISTRY_PASSWORD}" | docker login -u "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
       
-      # Pull latest images
       echo "Pulling latest images..."
       docker pull ${CI_REGISTRY_IMAGE}/backend:${TAG_LATEST}
       docker pull ${CI_REGISTRY_IMAGE}/frontend:${TAG_LATEST}
       
-      # Determine current active environment
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
           ACTIVE_COLOR="blue"
           INACTIVE_COLOR="green"
@@ -331,11 +362,9 @@ deploy_production:
       echo "Current active: $ACTIVE_COLOR"
       echo "Deploying to: $INACTIVE_COLOR"
       
-      # Update inactive environment
       echo "Updating $INACTIVE_COLOR environment..."
       docker-compose -f docker-compose.prod.yml up -d backend-${INACTIVE_COLOR}
       
-      # Wait for health check
       echo "Waiting for $INACTIVE_COLOR to become healthy..."
       for i in {1..30}; do
           if docker exec goshort-backend-${INACTIVE_COLOR} curl -f http://localhost:8080/api/v1/health 2>/dev/null; then
@@ -350,23 +379,18 @@ deploy_production:
           sleep 2
       done
       
-      # Switch nginx upstream
       echo "Switching nginx to $INACTIVE_COLOR..."
       echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" | sudo tee ${DEPLOY_PATH}/nginx/upstreams/backend_active.conf
       
-      # Reload nginx
       docker exec goshort-nginx nginx -t && docker exec goshort-nginx nginx -s reload
       
       echo "Nginx switched to $INACTIVE_COLOR"
       
-      # Wait a bit for connections to drain
       sleep 5
       
-      # Stop old active environment
       echo "Stopping $ACTIVE_COLOR environment..."
       docker-compose -f docker-compose.prod.yml stop backend-${ACTIVE_COLOR}
       
-      # Update frontend
       echo "Updating frontend..."
       docker-compose -f docker-compose.prod.yml up -d frontend
       
@@ -375,7 +399,6 @@ deploy_production:
       echo "Active environment: $INACTIVE_COLOR"
       echo "=========================================="
       
-      # Cleanup old images
       docker image prune -af --filter "until=72h"
       
       ENDSSH
@@ -432,7 +455,6 @@ rollback_production:
       set -e
       cd ${DEPLOY_PATH}
       
-      # Determine current active
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
           CURRENT="blue"
           PREVIOUS="green"
@@ -443,13 +465,10 @@ rollback_production:
       
       echo "Rolling back from $CURRENT to $PREVIOUS"
       
-      # Start previous environment
       docker-compose -f docker-compose.prod.yml up -d backend-${PREVIOUS}
       
-      # Wait for health
       sleep 10
       
-      # Switch nginx
       echo "server backend-${PREVIOUS}:8080;" | sudo tee ${DEPLOY_PATH}/nginx/upstreams/backend_active.conf
       docker exec goshort-nginx nginx -s reload
       
