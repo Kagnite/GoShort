@@ -265,8 +265,8 @@ build_push_backend:
   stage: build
   image: docker:24-cli
   tags: [vps-runner]
-  services:
-    - docker:24-dind
+  variables:
+    DOCKER_HOST: unix:///var/run/docker.sock
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
@@ -294,8 +294,8 @@ build_push_frontend:
   stage: build
   image: docker:24-cli
   tags: [vps-runner]
-  services:
-    - docker:24-dind
+  variables:
+    DOCKER_HOST: unix:///var/run/docker.sock
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
