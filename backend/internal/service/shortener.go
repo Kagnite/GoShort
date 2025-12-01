@@ -199,24 +199,19 @@ func (s *urlShortenerService) GetURLDetails(ctx context.Context, shortCode strin
 	return url, nil
 }
 
-func (s *urlShortenerService) DeleteURL(ctx context.Context, id string) error {
-	// Delete from database
-	if err := s.repo.Delete(ctx, id); err != nil {
-		return err
+func (s *urlShortenerService) DeleteURL(ctx context.Context, shortCode string) error {
+	// database
+	if err := s.repo.Delete(ctx, shortCode); err != nil {
+		return fmt.Errorf("failed to delete URL: %w", err)
 	}
 
-	// Get URL to find short code for cache invalidation
-	url, err := s.repo.GetByID(ctx, id)
-	if err == nil {
-		cacheKey := fmt.Sprintf("url:%s", url.ShortCode)
-		// Delete from cache (ignore errors)
-		= s.cache.Delete(ctx, cacheKey)
+	// cache (ignore error)
+	cacheKey := fmt.Sprintf("url:%s", shortCode)
+	_ = s.cache.Delete(ctx, cacheKey)
 
-	}
-
-	s.logger.Infow("URL deleted", "id", id)
 	return nil
 }
+
 
 func (s *urlShortenerService) ListURLs(ctx context.Context, limit, offset int) ([]*domain.URL, error) {
 	// Validate pagination params
