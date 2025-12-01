@@ -28,7 +28,10 @@ func main() {
 
 	// Initialize logger
 	logger := logging.NewLogger(cfg)
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+		}()
+
 
 	logger.Infow("starting goshort service",
 		"version", "1.0.0",

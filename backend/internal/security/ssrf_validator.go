@@ -15,6 +15,13 @@ import (
 )
 
 var (
+	// Compiled regexes for IP obfuscation detection
+	octalIPRegex   = regexp.MustCompile(`^0[0-7]+$`)
+	hexIPRegex     = regexp.MustCompile(`^0[xX][0-9a-fA-F]+$`)
+	decimalIPRegex = regexp.MustCompile(`^\d{7,10}$`)
+)
+
+var (
 	ErrInvalidScheme        = errors.New("only http/https scheme allowed")
 	ErrPrivateAddress       = errors.New("target resolves to private/loopback/internal IP")
 	ErrEmptyHost            = errors.New("hostname cannot be empty")
@@ -283,7 +290,8 @@ func (v *DefaultSSRFValidator) isIPv4MappedIPv6(ip net.IP) bool {
 }
 
 func (v *DefaultSSRFValidator) isDecimalIP(hostname string) bool {
-	if matched, _ := regexp.MatchString(`^\d{7,10}$`, hostname); matched {
+	// Use pre-compiled regex for better performance
+	if decimalIPRegex.MatchString(hostname) {
 		if num, err := strconv.ParseUint(hostname, 10, 32); err == nil {
 			ip := make(net.IP, 4)
 			ip[0] = byte(num >> 24)
@@ -303,7 +311,8 @@ func (v *DefaultSSRFValidator) isHexIP(hostname string) bool {
 			return true
 		}
 	}
-	if matched, _ := regexp.MatchString(`^0[xX][0-9a-fA-F]+(\.[0-9a-fA-F]+)*$`, hostname); matched {
+	// Use pre-compiled regex for better performance
+	if hexIPRegex.MatchString(hostname) {
 		return true
 	}
 	return false
@@ -314,7 +323,8 @@ func (v *DefaultSSRFValidator) isOctalIP(hostname string) bool {
 	if len(parts) >= 1 && len(parts) <= 4 {
 		for _, part := range parts {
 			if strings.HasPrefix(part, "0") && len(part) > 1 {
-				if matched, _ := regexp.MatchString(`^0[0-7]+$`, part); matched {
+				// Use pre-compiled regex instead of regexp.MatchString in loop
+				if octalIPRegex.MatchString(part) {
 					return true
 				}
 			}
@@ -387,8 +397,8 @@ func (v *DefaultSSRFValidator) isDomainAllowed(hostname string) bool {
 }
 
 func (v *DefaultSSRFValidator) isBlockedIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || 
-	   ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
 	blockedIPs := []string{
@@ -401,11 +411,11 @@ func (v *DefaultSSRFValidator) isBlockedIP(ip net.IP) bool {
 	}
 	if ip4 := ip.To4(); ip4 != nil {
 		if ip4[0] == 0 || (ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127) ||
-		   (ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 0) ||
-		   (ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2) ||
-		   (ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100) ||
-		   (ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113) ||
-		   ip4[0] >= 240 || ip4[3] == 255 {
+			(ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 0) ||
+			(ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2) ||
+			(ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100) ||
+			(ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113) ||
+			ip4[0] >= 240 || ip4[3] == 255 {
 			return true
 		}
 	}
@@ -497,4 +507,3 @@ func (v *DefaultSSRFValidator) CreateSafeClient() *http.Client {
 		},
 	}
 }
-

@@ -49,7 +49,10 @@ func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 func respondJSON(w http.ResponseWriter, data interface{}, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		// Log encoding error but response is already sent
+		return
+	}
 }
 
 func respondError(w http.ResponseWriter, message string, status int) {

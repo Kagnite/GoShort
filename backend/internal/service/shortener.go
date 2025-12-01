@@ -209,7 +209,9 @@ func (s *urlShortenerService) DeleteURL(ctx context.Context, id string) error {
 	url, err := s.repo.GetByID(ctx, id)
 	if err == nil {
 		cacheKey := fmt.Sprintf("url:%s", url.ShortCode)
-		s.cache.Delete(ctx, cacheKey)
+		// Delete from cache (ignore errors)
+		= s.cache.Delete(ctx, cacheKey)
+
 	}
 
 	s.logger.Infow("URL deleted", "id", id)
