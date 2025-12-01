@@ -452,8 +452,9 @@ rollback_production:
       ENDSSH
   environment:
     name: production
-    action: rollback
   when: manual
   only:
     - main
+
+
 
