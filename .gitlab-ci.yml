@@ -3,14 +3,12 @@
 # Blue-Green Deployment with Zero Downtime
 # ============================================
 
-
 stages:
   - quality
   - security
   - test
   - build
   - deploy
-
 
 variables:
   CI_REGISTRY_IMAGE: registry.gitlab.com/$CI_PROJECT_PATH
@@ -21,11 +19,9 @@ variables:
   DOCKER_DRIVER: overlay2
   DOCKER_HOST: unix:///var/run/docker.sock
 
-
 # ============================================
 # Backend Jobs
 # ============================================
-
 
 lint_backend:
   stage: quality
@@ -42,7 +38,6 @@ lint_backend:
     key: ${CI_COMMIT_REF_SLUG}-backend
     paths:
       - backend/.cache
-
 
 security_scan_backend:
   stage: security
@@ -66,7 +61,6 @@ security_scan_backend:
     - develop
   allow_failure: true
 
-
 sast_backend:
   stage: security
   image: returntocorp/semgrep:latest
@@ -86,7 +80,6 @@ sast_backend:
     - develop
   allow_failure: true
 
-
 dependency_scan_backend:
   stage: security
   image: golang:1.23-alpine
@@ -102,7 +95,6 @@ dependency_scan_backend:
     - main
     - develop
   allow_failure: true
-
 
 unit_test_backend:
   stage: test
@@ -173,11 +165,9 @@ unit_test_backend:
     - develop
   allow_failure: false
 
-
 # ============================================
 # Frontend Jobs
 # ============================================
-
 
 lint_frontend:
   stage: quality
@@ -198,7 +188,6 @@ lint_frontend:
     - develop
   allow_failure: true
 
-
 security_scan_frontend:
   stage: security
   image: node:20-alpine
@@ -214,7 +203,6 @@ security_scan_frontend:
     - main
     - develop
   allow_failure: true
-
 
 build_test_frontend:
   stage: test
@@ -234,11 +222,9 @@ build_test_frontend:
     - main
     - develop
 
-
 # ============================================
 # Build & Push Docker Images
 # ============================================
-
 
 build_push_backend:
   stage: build
@@ -263,7 +249,6 @@ build_push_backend:
     - develop
   retry: 2
 
-
 build_push_frontend:
   stage: build
   image: docker:25-cli
@@ -287,12 +272,10 @@ build_push_frontend:
     - develop
   retry: 2
 
-
 # ============================================
 # Deploy to Production (Blue-Green)
 # WITHOUT SSH - Direct execution on VPS
 # ============================================
-
 
 deploy_production:
   stage: deploy
@@ -311,7 +294,17 @@ deploy_production:
     - echo "Starting Blue-Green Deployment"
     - echo "=========================================="
     
+    # کپی فایل‌های مورد نیاز از Git workspace به سرور
+    - mkdir -p /opt/goshort/nginx/upstreams
+    - cp docker-compose.prod.yml /opt/goshort/docker-compose.prod.yml
+    - cp -r nginx/. /opt/goshort/nginx/
+    
     - cd /opt/goshort
+    
+    # بررسی فایل‌ها
+    - echo "Files in /opt/goshort:"
+    - ls -la *.yml
+    - ls -la nginx/
     
     - echo "Pulling latest images..."
     - docker pull $CI_REGISTRY_IMAGE/backend:latest
@@ -374,7 +367,6 @@ deploy_production:
     - main
   when: manual
 
-
 deploy_staging:
   stage: deploy
   image: docker:25-cli
@@ -387,16 +379,17 @@ deploy_staging:
     - docker info
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
+    - mkdir -p /opt/goshort-staging
+    - cp docker-compose.yml /opt/goshort-staging/docker-compose.yml
     - cd /opt/goshort-staging
-    - docker compose -f docker-compose.yml pull
-    - docker compose -f docker-compose.yml up -d
+    - docker compose pull
+    - docker compose up -d
     - docker image prune -af --filter "until=72h"
   environment:
     name: staging
     url: https://staging.kagnite.duckdns.org
   only:
     - develop
-
 
 rollback_production:
   stage: deploy
@@ -408,6 +401,7 @@ rollback_production:
     - chmod +x ~/.docker/cli-plugins/docker-compose
     - docker compose version
   script:
+    - cp docker-compose.prod.yml /opt/goshort/docker-compose.prod.yml
     - cd /opt/goshort
     
     - |
