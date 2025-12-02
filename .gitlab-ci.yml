@@ -15,7 +15,7 @@ variables:
   TAG_COMMIT: $CI_COMMIT_SHORT_SHA
   TAG_LATEST: latest
   TAG_BRANCH: $CI_COMMIT_REF_SLUG
-  SSH_PORT: "22"
+  SSH_PORT: "8787"
   DEPLOY_PATH: "/opt/goshort"
   DOCKER_DRIVER: overlay2
   DOCKER_HOST: unix:///var/run/docker.sock
@@ -281,9 +281,6 @@ deploy_production:
   stage: deploy
   image: alpine:3.19
   tags: [vps-runner]
-  variables:
-    SSH_PORT: "${SSH_PORT}"
-    DEPLOY_PATH: "${DEPLOY_PATH}"
   before_script:
     - apk add --no-cache openssh-client curl bash docker-cli
     - eval $(ssh-agent -s)
@@ -301,13 +298,13 @@ deploy_production:
       echo "Starting Blue-Green Deployment"
       echo "=========================================="
       
-      cd ${DEPLOY_PATH}
+      cd /opt/goshort
       
-      echo "${CI_REGISTRY_PASSWORD}" | docker login -u "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+      echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
       
       echo "Pulling latest images..."
-      docker pull ${CI_REGISTRY_IMAGE}/backend:${TAG_LATEST}
-      docker pull ${CI_REGISTRY_IMAGE}/frontend:${TAG_LATEST}
+      docker pull $CI_REGISTRY_IMAGE/backend:latest
+      docker pull $CI_REGISTRY_IMAGE/frontend:latest
       
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
           ACTIVE_COLOR="blue"
@@ -338,7 +335,7 @@ deploy_production:
       done
       
       echo "Switching nginx to $INACTIVE_COLOR..."
-      echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" | sudo tee ${DEPLOY_PATH}/nginx/upstreams/backend_active.conf
+      echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" | sudo tee /opt/goshort/nginx/upstreams/backend_active.conf
       
       docker exec goshort-nginx nginx -t && docker exec goshort-nginx nginx -s reload
       
@@ -362,7 +359,7 @@ deploy_production:
       ENDSSH
   environment:
     name: production
-    url: https://yourdomain.com
+    url: https://kagnite.duckdns.org
   only:
     - main
   when: manual
@@ -387,7 +384,7 @@ deploy_staging:
       ENDSSH
   environment:
     name: staging
-    url: https://staging.yourdomain.com
+    url: https://staging.kagnite.duckdns.org
   only:
     - develop
 
@@ -405,7 +402,7 @@ rollback_production:
     - |
       ssh -p "$SSH_PORT" $SERVER_USER@"$SERVER_IP" <<'ENDSSH'
       set -e
-      cd ${DEPLOY_PATH}
+      cd /opt/goshort
       
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
           CURRENT="blue"
@@ -421,7 +418,7 @@ rollback_production:
       
       sleep 10
       
-      echo "server backend-${PREVIOUS}:8080;" | sudo tee ${DEPLOY_PATH}/nginx/upstreams/backend_active.conf
+      echo "server backend-${PREVIOUS}:8080;" | sudo tee /opt/goshort/nginx/upstreams/backend_active.conf
       docker exec goshort-nginx nginx -s reload
       
       echo "Rollback completed to $PREVIOUS"
