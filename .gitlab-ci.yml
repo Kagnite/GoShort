@@ -15,7 +15,6 @@ variables:
   TAG_COMMIT: $CI_COMMIT_SHORT_SHA
   TAG_LATEST: latest
   TAG_BRANCH: $CI_COMMIT_REF_SLUG
-  SSH_PORT: "8787"
   DEPLOY_PATH: "/opt/goshort"
   DOCKER_DRIVER: overlay2
   DOCKER_HOST: unix:///var/run/docker.sock
@@ -275,58 +274,42 @@ build_push_frontend:
 
 # ============================================
 # Deploy to Production (Blue-Green)
+# WITHOUT SSH - Direct execution on VPS
 # ============================================
 
 deploy_production:
   stage: deploy
-  image: alpine:3.19
+  image: docker:25-cli
   tags: [vps-runner]
   before_script:
-    - apk add --no-cache openssh-client curl bash docker-cli
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ssh-keyscan -p "$SSH_PORT" -H "$SERVER_IP" >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
+    - echo "=========================================="
+    - echo "Starting Blue-Green Deployment"
+    - echo "=========================================="
+    
+    - cd /opt/goshort
+    
+    - echo "Pulling latest images..."
+    - docker pull $CI_REGISTRY_IMAGE/backend:latest
+    - docker pull $CI_REGISTRY_IMAGE/frontend:latest
+    
     - |
-      ssh -p "$SSH_PORT" $SERVER_USER@"$SERVER_IP" \
-        CI_REGISTRY="$CI_REGISTRY" \
-        CI_REGISTRY_USER="$CI_REGISTRY_USER" \
-        CI_REGISTRY_PASSWORD="$CI_REGISTRY_PASSWORD" \
-        CI_REGISTRY_IMAGE="$CI_REGISTRY_IMAGE" \
-        bash -s <<'ENDSSH'
-      set -e
-      
-      echo "=========================================="
-      echo "Starting Blue-Green Deployment"
-      echo "=========================================="
-      
-      mkdir -p /opt/goshort
-      cd /opt/goshort
-      
-      echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-      
-      echo "Pulling latest images..."
-      docker pull $CI_REGISTRY_IMAGE/backend:latest
-      docker pull $CI_REGISTRY_IMAGE/frontend:latest
-      
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
-          ACTIVE_COLOR="blue"
-          INACTIVE_COLOR="green"
+          export ACTIVE_COLOR="blue"
+          export INACTIVE_COLOR="green"
       else
-          ACTIVE_COLOR="green"
-          INACTIVE_COLOR="blue"
+          export ACTIVE_COLOR="green"
+          export INACTIVE_COLOR="blue"
       fi
-      
-      echo "Current active: $ACTIVE_COLOR"
-      echo "Deploying to: $INACTIVE_COLOR"
-      
-      echo "Updating $INACTIVE_COLOR environment..."
-      docker-compose -f docker-compose.prod.yml up -d backend-${INACTIVE_COLOR}
-      
-      echo "Waiting for $INACTIVE_COLOR to become healthy..."
+    
+    - echo "Current active $ACTIVE_COLOR, deploying to $INACTIVE_COLOR"
+    
+    - docker-compose -f docker-compose.prod.yml up -d backend-${INACTIVE_COLOR}
+    
+    - echo "Waiting for $INACTIVE_COLOR to become healthy..."
+    - |
       for i in {1..30}; do
           if docker exec goshort-backend-${INACTIVE_COLOR} curl -f http://localhost:8080/api/v1/health 2>/dev/null; then
               echo "$INACTIVE_COLOR is healthy!"
@@ -339,30 +322,29 @@ deploy_production:
           echo "Attempt $i/30: waiting..."
           sleep 2
       done
-      
-      echo "Switching nginx to $INACTIVE_COLOR..."
-      echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" | sudo tee /opt/goshort/nginx/upstreams/backend_active.conf
-      
-      docker exec goshort-nginx nginx -t && docker exec goshort-nginx nginx -s reload
-      
-      echo "Nginx switched to $INACTIVE_COLOR"
-      
-      sleep 5
-      
-      echo "Stopping $ACTIVE_COLOR environment..."
-      docker-compose -f docker-compose.prod.yml stop backend-${ACTIVE_COLOR}
-      
-      echo "Updating frontend..."
-      docker-compose -f docker-compose.prod.yml up -d frontend
-      
-      echo "=========================================="
-      echo "Deployment completed successfully!"
-      echo "Active environment: $INACTIVE_COLOR"
-      echo "=========================================="
-      
-      docker image prune -af --filter "until=72h"
-      
-      ENDSSH
+    
+    - echo "Switching nginx to $INACTIVE_COLOR..."
+    - echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" > /opt/goshort/nginx/upstreams/backend_active.conf
+    
+    - docker exec goshort-nginx nginx -t
+    - docker exec goshort-nginx nginx -s reload
+    
+    - echo "Nginx switched to $INACTIVE_COLOR"
+    
+    - sleep 5
+    
+    - echo "Stopping $ACTIVE_COLOR environment..."
+    - docker-compose -f docker-compose.prod.yml stop backend-${ACTIVE_COLOR}
+    
+    - echo "Updating frontend..."
+    - docker-compose -f docker-compose.prod.yml up -d frontend
+    
+    - echo "=========================================="
+    - echo "Deployment completed successfully!"
+    - echo "Active environment $INACTIVE_COLOR"
+    - echo "=========================================="
+    
+    - docker image prune -af --filter "until=72h"
   environment:
     name: production
     url: https://kagnite.duckdns.org
@@ -372,22 +354,16 @@ deploy_production:
 
 deploy_staging:
   stage: deploy
-  image: alpine:3.19
+  image: docker:25-cli
   tags: [vps-runner]
   before_script:
-    - apk add --no-cache openssh-client curl bash
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "$SSH_PORT" -H "$STAGING_SERVER_IP" >> ~/.ssh/known_hosts
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
-    - |
-      ssh -p "$SSH_PORT" $SERVER_USER@"$STAGING_SERVER_IP" <<'ENDSSH'
-      cd /opt/goshort-staging
-      docker-compose -f docker-compose.yml pull
-      docker-compose -f docker-compose.yml up -d
-      docker image prune -af
-      ENDSSH
+    - cd /opt/goshort-staging
+    - docker-compose -f docker-compose.yml pull
+    - docker-compose -f docker-compose.yml up -d
+    - docker image prune -af --filter "until=72h"
   environment:
     name: staging
     url: https://staging.kagnite.duckdns.org
@@ -396,20 +372,12 @@ deploy_staging:
 
 rollback_production:
   stage: deploy
-  image: alpine:3.19
+  image: docker:25-cli
   tags: [vps-runner]
-  before_script:
-    - apk add --no-cache openssh-client bash
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - ssh-keyscan -p "$SSH_PORT" -H "$SERVER_IP" >> ~/.ssh/known_hosts
   script:
+    - cd /opt/goshort
+    
     - |
-      ssh -p "$SSH_PORT" $SERVER_USER@"$SERVER_IP" <<'ENDSSH'
-      set -e
-      cd /opt/goshort
-      
       if docker ps --format '{{.Names}}' | grep -q "backend-blue"; then
           CURRENT="blue"
           PREVIOUS="green"
@@ -417,18 +385,17 @@ rollback_production:
           CURRENT="green"
           PREVIOUS="blue"
       fi
-      
-      echo "Rolling back from $CURRENT to $PREVIOUS"
-      
-      docker-compose -f docker-compose.prod.yml up -d backend-${PREVIOUS}
-      
-      sleep 10
-      
-      echo "server backend-${PREVIOUS}:8080;" | sudo tee /opt/goshort/nginx/upstreams/backend_active.conf
-      docker exec goshort-nginx nginx -s reload
-      
-      echo "Rollback completed to $PREVIOUS"
-      ENDSSH
+    
+    - echo "Rolling back from $CURRENT to $PREVIOUS"
+    
+    - docker-compose -f docker-compose.prod.yml up -d backend-${PREVIOUS}
+    
+    - sleep 10
+    
+    - echo "server backend-${PREVIOUS}:8080;" > /opt/goshort/nginx/upstreams/backend_active.conf
+    - docker exec goshort-nginx nginx -s reload
+    
+    - echo "Rollback completed to $PREVIOUS"
   environment:
     name: production
   when: manual
