@@ -126,7 +126,7 @@ unit_test_backend:
     - apk add --no-cache gcc musl-dev postgresql-client
     - |
       echo "Waiting for PostgreSQL..."
-      for i in {1..30}; do
+      for i in $(seq 1 30); do
         if pg_isready -h postgres -U postgres; then
           echo "PostgreSQL is ready!"
           break
@@ -136,7 +136,7 @@ unit_test_backend:
       done
     - |
       echo "Waiting for Redis..."
-      for i in {1..30}; do
+      for i in $(seq 1 30); do
         if nc -z redis 6379; then
           echo "Redis is ready!"
           break
@@ -299,7 +299,7 @@ deploy_production:
     
     - cd /opt/goshort
     
-    - echo "Starting databases only (nginx untouched)..."
+    - echo "Starting databases only..."
     - docker compose -f docker-compose.prod.yml up -d postgres redis
     
     - echo "Pulling latest images..."
@@ -321,7 +321,7 @@ deploy_production:
     
     - echo "Health check for $INACTIVE_COLOR..."
     - |
-      for i in {1..30}; do
+      for i in $(seq 1 30); do
         if docker exec goshort-backend-${INACTIVE_COLOR} curl -f http://localhost:8080/api/v1/health >/dev/null 2>&1; then
             echo "$INACTIVE_COLOR is healthy!"
             break
@@ -330,7 +330,7 @@ deploy_production:
         sleep 2
       done
     
-    - echo "Switching nginx config (reload only, no restart)..."
+    - echo "Switching nginx config..."
     - echo "server backend-${INACTIVE_COLOR}:8080 max_fails=3 fail_timeout=30s;" > nginx/upstreams/backend_active.conf
     - NGINX_CONTAINER=$(docker ps --format '{{.Names}}' | grep nginx | head -1)
     - docker exec $NGINX_CONTAINER nginx -t
