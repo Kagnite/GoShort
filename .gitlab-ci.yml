@@ -25,7 +25,9 @@ variables:
   
   # Docker
   DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: 1
 
 # ============================================
 # Backend Jobs
@@ -265,9 +267,14 @@ build_push_backend:
   stage: build
   image: docker:25-cli
   tags: [vps-runner]
-  variables:
-    DOCKER_HOST: unix:///var/run/docker.sock
+  services:
+    - docker:25-dind
   before_script:
+    - sleep 10
+    - docker info
+    - echo "Registry $CI_REGISTRY"
+    - echo "User $CI_REGISTRY_USER"
+    - echo "Image $CI_REGISTRY_IMAGE"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - cd backend
@@ -294,9 +301,14 @@ build_push_frontend:
   stage: build
   image: docker:25-cli
   tags: [vps-runner]
-  variables:
-    DOCKER_HOST: unix:///var/run/docker.sock
+  services:
+    - docker:25-dind
   before_script:
+    - sleep 10
+    - docker info
+    - echo "Registry $CI_REGISTRY"
+    - echo "User $CI_REGISTRY_USER"
+    - echo "Image $CI_REGISTRY_IMAGE"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - cd frontend
