@@ -11,31 +11,19 @@ stages:
   - deploy
 
 variables:
-  # Docker Registry
   CI_REGISTRY_IMAGE: registry.gitlab.com/$CI_PROJECT_PATH
-  
-  # Image Tags
   TAG_COMMIT: $CI_COMMIT_SHORT_SHA
   TAG_LATEST: latest
   TAG_BRANCH: $CI_COMMIT_REF_SLUG
-  
-  # Deployment
   SSH_PORT: "22"
   DEPLOY_PATH: "/opt/goshort"
-  
-  # Docker
   DOCKER_DRIVER: overlay2
-  DOCKER_HOST: tcp://docker:2376
-  DOCKER_TLS_CERTDIR: "/certs"
-  DOCKER_TLS_VERIFY: 1
+  DOCKER_HOST: unix:///var/run/docker.sock
 
 # ============================================
 # Backend Jobs
 # ============================================
 
-# ---------------------------------------------------------
-# Lint Backend
-# ---------------------------------------------------------
 lint_backend:
   stage: quality
   image: golangci/golangci-lint:v1.61.0
@@ -52,9 +40,6 @@ lint_backend:
     paths:
       - backend/.cache
 
-# ---------------------------------------------------------
-# Security Scan Backend
-# ---------------------------------------------------------
 security_scan_backend:
   stage: security
   image: golang:1.23-alpine
@@ -77,9 +62,6 @@ security_scan_backend:
     - develop
   allow_failure: true
 
-# ---------------------------------------------------------
-# SAST with Semgrep
-# ---------------------------------------------------------
 sast_backend:
   stage: security
   image: returntocorp/semgrep:latest
@@ -99,9 +81,6 @@ sast_backend:
     - develop
   allow_failure: true
 
-# ---------------------------------------------------------
-# Dependency Scanning
-# ---------------------------------------------------------
 dependency_scan_backend:
   stage: security
   image: golang:1.23-alpine
@@ -118,9 +97,6 @@ dependency_scan_backend:
     - develop
   allow_failure: true
 
-# ---------------------------------------------------------
-# Unit Tests Backend
-# ---------------------------------------------------------
 unit_test_backend:
   stage: test
   image: golang:1.23-alpine
@@ -194,9 +170,6 @@ unit_test_backend:
 # Frontend Jobs
 # ============================================
 
-# ---------------------------------------------------------
-# Lint Frontend
-# ---------------------------------------------------------
 lint_frontend:
   stage: quality
   image: node:20-alpine
@@ -216,9 +189,6 @@ lint_frontend:
     - develop
   allow_failure: true
 
-# ---------------------------------------------------------
-# Security Scan Frontend
-# ---------------------------------------------------------
 security_scan_frontend:
   stage: security
   image: node:20-alpine
@@ -235,9 +205,6 @@ security_scan_frontend:
     - develop
   allow_failure: true
 
-# ---------------------------------------------------------
-# Build Frontend (Test)
-# ---------------------------------------------------------
 build_test_frontend:
   stage: test
   image: node:20-alpine
@@ -260,17 +227,11 @@ build_test_frontend:
 # Build & Push Docker Images
 # ============================================
 
-# ---------------------------------------------------------
-# Build & Push Backend
-# ---------------------------------------------------------
 build_push_backend:
   stage: build
   image: docker:25-cli
   tags: [vps-runner]
-  services:
-    - docker:25-dind
   before_script:
-    - sleep 10
     - docker info
     - echo "Registry $CI_REGISTRY"
     - echo "User $CI_REGISTRY_USER"
@@ -294,17 +255,11 @@ build_push_backend:
     - develop
   retry: 2
 
-# ---------------------------------------------------------
-# Build & Push Frontend
-# ---------------------------------------------------------
 build_push_frontend:
   stage: build
   image: docker:25-cli
   tags: [vps-runner]
-  services:
-    - docker:25-dind
   before_script:
-    - sleep 10
     - docker info
     - echo "Registry $CI_REGISTRY"
     - echo "User $CI_REGISTRY_USER"
@@ -331,6 +286,7 @@ build_push_frontend:
 # ============================================
 # Deploy to Production (Blue-Green)
 # ============================================
+
 deploy_production:
   stage: deploy
   image: alpine:3.19
@@ -421,9 +377,6 @@ deploy_production:
     - main
   when: manual
 
-# ============================================
-# Deploy to Staging
-# ============================================
 deploy_staging:
   stage: deploy
   image: alpine:3.19
@@ -448,9 +401,6 @@ deploy_staging:
   only:
     - develop
 
-# ============================================
-# Rollback Job
-# ============================================
 rollback_production:
   stage: deploy
   image: alpine:3.19
