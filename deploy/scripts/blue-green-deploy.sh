@@ -2,7 +2,7 @@
 
 # ============================================
 # Blue-Green Deployment Script
-# Zero Downtime Deployment
+# Zero Downtime Deployment with Debugging
 # ============================================
 
 set -e
@@ -35,14 +35,37 @@ check_health() {
     log_info "Checking health of $container_name..."
     
     for i in $(seq 1 $max_attempts); do
+        # تلاش برای بررسی سلامت (بی‌صدا)
         if docker exec "$container_name" curl -f http://localhost:8080/api/v1/health >/dev/null 2>&1; then
             log_success "$container_name is healthy!"
             return 0
         fi
+        
+        # چاپ پیام انتظار هر ۵ ثانیه
+        if [ $((i % 3)) -eq 0 ]; then
+             log_info "Attempt $i/$max_attempts: waiting for health..."
+        fi
         sleep $HEALTH_CHECK_INTERVAL
     done
     
-    log_error "$container_name failed health check"
+    # === بخش دیباگ (فقط وقتی اجرا می‌شود که هلث‌چک فیل شود) ===
+    log_error "$container_name failed health check!"
+    log_warning "================ DEBUG INFO START ================"
+    
+    echo "1. Checking if curl is installed inside container:"
+    docker exec "$container_name" which curl || echo "CURL NOT FOUND!"
+    
+    echo ""
+    echo "2. Curl Verbose Output (Why connection failed?):"
+    docker exec "$container_name" curl -v http://localhost:8080/api/v1/health || true
+    
+    echo ""
+    echo "3. Container Logs (Last 50 lines):"
+    docker logs --tail 50 "$container_name"
+    
+    log_warning "================ DEBUG INFO END ================"
+    # ==========================================================
+
     return 1
 }
 
