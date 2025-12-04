@@ -20,7 +20,7 @@ variables:
   DOCKER_HOST: unix:///var/run/docker.sock
 
 # ============================================
-# 1. Quality & Security (Backend & Frontend)
+# Quality & Security
 # ============================================
 
 lint_backend:
@@ -30,10 +30,7 @@ lint_backend:
   script:
     - cd backend
     - golangci-lint run --timeout 10m --verbose ./...
-  only:
-    - merge_requests
-    - main
-    - develop
+  only: [merge_requests, main, develop]
   cache:
     key: ${CI_COMMIT_REF_SLUG}-backend
     paths:
@@ -84,7 +81,7 @@ security_scan_frontend:
   only: [merge_requests, main, develop]
 
 # ============================================
-# 2. Tests
+# Tests
 # ============================================
 
 unit_test_backend:
@@ -131,7 +128,7 @@ build_test_frontend:
   only: [merge_requests, main, develop]
 
 # ============================================
-# 3. Build & Push
+# Build & Push
 # ============================================
 
 build_push_backend:
@@ -161,10 +158,9 @@ build_push_frontend:
   only: [main, develop]
 
 # ============================================
-# 4. Deployment (Staging & Prod)
+# Deployment
 # ============================================
 
-# --- Staging Deployment ---
 deploy_staging:
   stage: deploy
   image: docker:25-cli
@@ -187,12 +183,13 @@ deploy_staging:
   only:
     - develop
 
-# --- Production Deployment (Blue-Green) ---
 deploy_production:
   stage: deploy
   image: docker:25-cli
   tags: [vps-runner]
   before_script:
+    # IMPORTANT: Install bash and curl because Alpine image doesn't have bash by default
+    - apk add --no-cache bash curl sed
     - mkdir -p ~/.docker/cli-plugins
     - wget -q https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -O ~/.docker/cli-plugins/docker-compose
     - chmod +x ~/.docker/cli-plugins/docker-compose
@@ -205,12 +202,15 @@ deploy_production:
     - cp docker-compose.prod.yml /opt/goshort/
     - cp nginx/nginx.conf /opt/goshort/nginx/
     
-    # 2. Copy the script logic (This replaces the 100 lines of YAML logic)
+    # 2. Copy the script
     - cp deploy/scripts/blue-green-deploy.sh /opt/goshort/deploy.sh
-    - chmod +x /opt/goshort/deploy.sh
     
-    # 3. Execute the script
-    - /opt/goshort/deploy.sh
+    # 3. FIX: Convert Windows line endings (CRLF) to Unix (LF) just in case
+    - sed -i 's/\r$//' /opt/goshort/deploy.sh
+    
+    # 4. Make executable and Run explicitly with bash
+    - chmod +x /opt/goshort/deploy.sh
+    - /bin/bash /opt/goshort/deploy.sh
     
   environment:
     name: production
@@ -219,7 +219,6 @@ deploy_production:
     - main
   when: manual
 
-# --- Rollback ---
 rollback_production:
   stage: deploy
   image: docker:25-cli
@@ -230,8 +229,6 @@ rollback_production:
     - chmod +x ~/.docker/cli-plugins/docker-compose
   script:
     - cd /opt/goshort
-    
-    # Determine previous version logic (Simplified)
     - |
       if docker ps --format '{{.Names}}' | grep -q "goshort-backend-blue"; then
           PREVIOUS="green"
@@ -240,13 +237,11 @@ rollback_production:
           PREVIOUS="blue"
           CURRENT="green"
       fi
-    
     - echo "Rolling back to $PREVIOUS..."
     - docker compose -f docker-compose.prod.yml up -d backend-${PREVIOUS}
     - echo "server backend-${PREVIOUS}:8080 max_fails=3 fail_timeout=30s;" > nginx/upstreams/backend_active.conf
     - docker exec goshort-nginx nginx -s reload
     - docker stop goshort-backend-${CURRENT}
-    
   environment:
     name: production
   when: manual
