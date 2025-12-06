@@ -76,6 +76,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import api from '../services/api' 
 
 const longUrl = ref('')
 const customAlias = ref('')
@@ -89,13 +90,10 @@ const shortenUrl = async () => {
   shortUrl.value = ''
 
   try {
-   
-    const response = await axios.post('/v1/shorten', {
+    const response = await api.post('/v1/shorten', {
       url: longUrl.value,
       short: customAlias.value
     })
-    
-   
     
     shortUrl.value = response.data.short_url || response.data.result || response.data; 
     
