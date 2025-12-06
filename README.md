@@ -1,106 +1,239 @@
-# GoShort - Secure & Cloud-Native URL Shortener 🚀
+# 🚀 GoShort - Cloud-Native URL Shortener
 
-GoShort is a high-performance, containerized URL shortening microservice built with **Golang (Gin)**.  
-This project demonstrates a full **DevSecOps lifecycle**, featuring a production-grade CI/CD pipeline with automated linting, security scanning (SAST), testing, and seamless deployment to a VPS using GitLab Runners.
+![Project
+Status](https://img.shields.io/badge/status-active-success.svg)
+![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
----
+**GoShort** is a production-ready, full-stack URL shortening service
+built with a modern **microservices architecture**. It leverages Golang
+for high-performance backend logic, Redis for caching, PostgreSQL for
+storage, and Vue.js 3 for a sleek glassmorphism frontend.
 
-## 🏗️ Architecture & Workflow
+------------------------------------------------------------------------
 
-The project follows a **BYOR (Bring Your Own Runner)** architecture to ensure secure and efficient deployments.
+## ✨ Features
 
-graph LR
-A[Developer] -->|Push Code| B(GitLab Repo)
-B --> C{CI/CD Pipeline}
-C -->|1. Quality| D[GolangCI-Lint]
-C -->|2. Security| E[Gosec SAST]
-C -->|3. Test| F[Go Test]
-C -->|4. Build| G[Docker Registry]
-C -->|5. Deploy| H[Production VPS]
-H -->|Pull Image| G
+-   ⚡ **High Performance:** Go backend + Redis caching for extremely
+    fast redirects.
+-   🎨 **Modern UI:** Glassmorphism design built with Vue.js 3 and Vite.
+-   🛡️ **Secure:** Includes domain allowlist, SSRF protection, and
+    secure headers.
+-   🐳 **Dockerized:** Fully containerized using Docker Compose.
+-   🔄 **Blue/Green Deployment:** Zero-downtime backend releases.
+-   🌐 **Nginx Gateway:** Reverse proxy for routing and static asset
+    delivery.
+-   📊 **Analytics Ready:** Schema allows tracking clicks and user
+    agents.
 
-
----
+------------------------------------------------------------------------
 
 ## 🛠️ Tech Stack
 
-- **Core**: Golang 1.21, Gin Framework
-- **Containerization**: Docker (Multi-stage builds for <20MB images)
-- **CI/CD**: GitLab CI, GitLab Runners (Self-hosted on VPS)
-- **Security**: Gosec (SAST), GolangCI-Lint
-- **Infrastructure**: Ubuntu VPS, SSH, Docker Engine
+  ------------------------------------------------------------------------
+  Component      Technology     Description
+  -------------- -------------- ------------------------------------------
+  Frontend       Vue.js 3       SPA, Vite, Axios
 
----
+  Backend        Go (Golang)    Chi Router, Clean Architecture
 
-## 🚀 DevOps Pipeline Strategy
+  Database       PostgreSQL 15  ACID-compliant URL storage
 
-The `.gitlab-ci.yml` configuration implements a **5-stage pipeline** ensuring zero bad code reaches production:
+  Cache          Redis 7        Hot data caching, rate limiting
 
-1. **Quality** (`lint_code`): Enforces code standards using `golangci-lint`.
-2. **Security** (`security_scan`): Scans for vulnerabilities (e.g., hardcoded secrets, unsafe functions) using `gosec`.
-3. **Test** (`unit_test`): Runs functional unit tests.
-4. **Build** (`build_push_docker`):
-   - Builds a lightweight Alpine-based image.
-   - Tags with both `commit-sha` (for rollback) and `latest`.
-   - Pushes to GitLab Container Registry.
-5. **Deploy** (`deploy_prod`):
-   - Connects to VPS via SSH using a secure Runner.
-   - Pulls the latest image.
-   - Performs zero-downtime container replacement.
-   - **Health Check**: Verifies the service is up via `curl` before marking success.
+  Gateway        Nginx          Reverse proxy
 
----
+  DevOps         Docker Compose Multi-stage builds, microservices
+                                orchestration
+  ------------------------------------------------------------------------
 
-## 📦 How to Run Locally
+------------------------------------------------------------------------
 
-If you want to run this project on your local machine:
+## 🏗️ Architecture Overview
+
+The system includes the following services:
+
+1.  **Nginx** --- Entry point, reverse proxy, static asset handler\
+2.  **Frontend** --- Vue.js SPA\
+3.  **Backend (Blue/Green)** --- Go API running dual services\
+4.  **PostgreSQL** --- Persistent database\
+5.  **Redis** --- Fast in-memory cache
+
+------------------------------------------------------------------------
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Docker & Docker Compose
-- Go 1.21+
+
+-   Docker & Docker Compose
+-   Git
+
+------------------------------------------------------------------------
+
+### 1. Clone the Repository
+
+``` bash
+git clone https://github.com/Kagnite/GoShort.git
+cd GoShort
+```
+
+------------------------------------------------------------------------
+
+### 2. Configure Environment
+
+Modify `docker-compose.prod.yml` or export your environment variables
+manually.
+
+Production requires secure values.
+
+------------------------------------------------------------------------
+
+### 3. Run the Services with Docker Compose
+
+``` bash
+# Secrets (required in production)
+export DB_PASSWORD='your_secure_password'
+export REDIS_PASSWORD='your_secure_password'
+
+# Disable allowlist for testing
+export SECURITY_USE_ALLOWLIST=false
+
+# Start all services
+docker compose -f docker-compose.prod.yml up -d
+```
+
+------------------------------------------------------------------------
+
+## 4. Access the Application
+
+### Frontend
+
+    http://localhost:8081
+    http://<server-ip-or-domain>:8081
+
+### API Health Check
+
+    http://localhost:8081/api/v1/health
+    http://<server-ip-or-domain>:8081/api/v1/health
+
+------------------------------------------------------------------------
+
+## 🔧 Configuration Variables
+
+  -------------------------------------------------------------------------------------
+  Variable                   Description                       Default
+  -------------------------- --------------------------------- ------------------------
+  `DB_PASSWORD`              PostgreSQL Password               Required
+
+  `REDIS_PASSWORD`           Redis Password                    Required
+
+  `SECURITY_USE_ALLOWLIST`   Enable/Disable domain restriction true
+
+  `ALLOWED_DOMAINS`          Comma-separated list of allowed   kagnite.duckdns.org
+                             domains                           
+
+  `BASE_URL`                 Base URL for generated short      https://yourdomain.com
+                             links                             
+  -------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## 🗄️ Database Schema
+
+``` sql
+CREATE TABLE urls (
+    id VARCHAR(36) PRIMARY KEY,
+    original_url TEXT NOT NULL,
+    short_code VARCHAR(50) UNIQUE NOT NULL,
+    click_count BIGINT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+------------------------------------------------------------------------
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Steps
 
-1. **Clone the repository**:
+1.  **Fork the Project**
 
-git clone <repo-url>
-cd goshort
+2.  **Create your Feature Branch**
 
+    ``` bash
+    git checkout -b feature/AmazingFeature
+    ```
 
-2. **Run with Docker**:
+3.  **Commit your Changes**
 
-docker build -t goshort:local .
-docker run -p 8080:8080 goshort:local
+    ``` bash
+    git commit -m "Add AmazingFeature"
+    ```
 
+4.  **Push to the Branch**
 
-3. **Verify**:
-- Open browser at `http://localhost:8080`
+    ``` bash
+    git push origin feature/AmazingFeature
+    ```
 
-{
-"app": "GoShort",
-"status": "healthy"
-}
+5.  **Open a Pull Request**
 
+------------------------------------------------------------------------
 
----
+# 📝 Pull Request Template
 
-## 🔒 Security Measures
+## 📌 Description
 
-- **No Root User**: The container runs as a non-root process (best practice).
-- **Minimal Base Image**: Uses `alpine` to reduce attack surface.
-- **SSH Hardening**: Deployment uses SSH Keys (no passwords) and strict host checking configurations.
-- **SAST Integration**: Every commit is scanned for CVEs before build.
+Provide a clear explanation of the changes and why they are needed.
 
----
+------------------------------------------------------------------------
 
-## 🔮 Roadmap
+## ✅ Type of Change
 
-- [ ] Integrate PostgreSQL for persistent storage.
-- [ ] Implement Redis for caching hot URLs.
-- [ ] Migrate from Docker Compose to Kubernetes (K8s) manifest files.
-- [ ] Add Prometheus metrics endpoint.
+-   [ ] Feature\
+-   [ ] Bug Fix\
+-   [ ] Breaking Change\
+-   [ ] Refactor\
+-   [ ] Documentation Update\
+-   [ ] Performance Improvement\
+-   [ ] Other
 
----
+------------------------------------------------------------------------
 
-**Author**: [Kagnite]  
-Built with ❤️ and Go.
+## 🔍 Related Issues
+
+    Closes #ISSUE_NUMBER
+
+------------------------------------------------------------------------
+
+## 🧪 Testing Checklist
+
+-   [ ] Unit Tests\
+-   [ ] Integration Tests\
+-   [ ] Manual Testing
+
+------------------------------------------------------------------------
+
+## 📸 Screenshots (Optional)
+
+------------------------------------------------------------------------
+
+## 📦 Deployment Notes
+
+------------------------------------------------------------------------
+
+## ⚠️ Checklist
+
+-   [ ] Follows project coding style\
+-   [ ] Self-review done\
+-   [ ] Comments added\
+-   [ ] Tests added or updated\
+-   [ ] All tests pass
+
+------------------------------------------------------------------------
+
+## 📄 License
+
+Distributed under the MIT License. See the `LICENSE` file for details.
