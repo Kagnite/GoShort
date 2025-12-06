@@ -80,23 +80,21 @@ switch_nginx() {
         STATUS=$(docker inspect --format='{{.State.Status}}' "$NGINX_CONTAINER" 2>/dev/null || echo "unknown")
         
         # If Nginx is in a crash loop (restarting/exited), FORCE RECREATE it.
-        # This makes it start fresh and pick up the new config file we just wrote.
         if [ "$STATUS" == "restarting" ] || [ "$STATUS" == "exited" ] || [ "$STATUS" == "dead" ]; then
-            log_warning "Nginx is in '$STATUS' state. Forcing restart to pick up new config..."
-            docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
+            log_warning "Nginx is in '$STATUS' state. Performing aggressive restart..."
+            docker stop "$NGINX_CONTAINER" || true
+            docker rm -f "$NGINX_CONTAINER" || true
+            sleep 2
+            docker compose -f docker-compose.prod.yml up -d nginx
         fi
     fi
 
-    # Wait for Nginx to stabilize
     log_info "Waiting for Nginx to stabilize..."
     sleep 5
     
-    # Get container name again in case it changed
     NGINX_CONTAINER=$(docker ps --format '{{.Names}}' | grep nginx | head -1)
 
     log_info "Testing Nginx configuration..."
-    
-    # Test config and print full error logs if it fails
     if ! docker exec "$NGINX_CONTAINER" nginx -t; then
         log_error "Nginx configuration test failed!"
         log_warning "Nginx Logs:"
@@ -126,7 +124,6 @@ main() {
     docker pull "$IMAGE_BACKEND"
     docker pull "$IMAGE_FRONTEND"
     
-    # Determine which color is currently running (if any)
     if docker ps --format '{{.Names}}' | grep -q "goshort-backend-blue"; then
         ACTIVE_COLOR="blue"
         INACTIVE_COLOR="green"
@@ -148,23 +145,23 @@ main() {
         exit 1
     fi
     
-    # 3. Switch Nginx (This handles the crash loop automatically)
+    # 3. Update Frontend (MOVED UP: Before Nginx Switch)
+    # This ensures 'frontend' container exists when Nginx starts
+    log_info "Updating frontend..."
+    docker compose -f docker-compose.prod.yml up -d frontend
+
+    # 4. Switch Nginx
     if ! switch_nginx "$INACTIVE_COLOR"; then
         exit 1
     fi
     
-    # 4. Cleanup Old Backend
+    # 5. Cleanup Old Backend
     if [ -n "$ACTIVE_COLOR" ]; then
         log_info "Stopping old backend ($ACTIVE_COLOR) to free up memory..."
         docker stop "goshort-backend-${ACTIVE_COLOR}" || true
         docker rm "goshort-backend-${ACTIVE_COLOR}" || true
     fi
 
-    # 5. Update Frontend
-    log_info "Updating frontend..."
-    docker compose -f docker-compose.prod.yml up -d frontend
-
-    # 6. General Cleanup
     docker image prune -af --filter "until=24h" >/dev/null 2>&1 || true
     
     log_success "Deployment Complete! Active: $INACTIVE_COLOR"
