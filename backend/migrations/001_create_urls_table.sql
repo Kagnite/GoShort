@@ -1,5 +1,7 @@
+DROP TABLE IF EXISTS urls;
+
 -- Create URLs table
-CREATE TABLE IF NOT EXISTS urls (
+CREATE TABLE urls (
     id VARCHAR(36) PRIMARY KEY,
     original_url TEXT NOT NULL,
     short_code VARCHAR(50) UNIQUE NOT NULL,
@@ -25,10 +27,3 @@ COMMENT ON TABLE urls IS 'Stores URL shortening mappings';
 COMMENT ON COLUMN urls.id IS 'Unique identifier (UUID)';
 COMMENT ON COLUMN urls.original_url IS 'Original long URL';
 COMMENT ON COLUMN urls.short_code IS 'Short code for the URL';
-COMMENT ON COLUMN urls.created_at IS 'Timestamp when URL was created';
-COMMENT ON COLUMN urls.expires_at IS 'Optional expiration timestamp';
-COMMENT ON COLUMN urls.click_count IS 'Number of times short URL was accessed';
-COMMENT ON COLUMN urls.is_active IS 'Whether the URL is active';
-COMMENT ON COLUMN urls.created_by_ip IS 'IP address of creator (anonymized)';
-COMMENT ON COLUMN urls.user_agent IS 'User agent of creator';
-

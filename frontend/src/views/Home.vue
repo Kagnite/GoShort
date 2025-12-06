@@ -1,13 +1,11 @@
 <template>
   <div class="home-container container">
-    
     <div class="hero-section text-center">
       <h1 class="title">Shorten Your URLs</h1>
       <p class="subtitle">Fast, secure, and powerful URL shortening service for modern needs.</p>
     </div>
 
     <div class="card glass-panel main-shortener">
-      
       <div v-if="error" class="alert alert-error">
         <i class="fa-solid fa-circle-exclamation"></i> {{ error }}
       </div>
@@ -26,23 +24,12 @@
       <form @submit.prevent="shortenUrl" class="shortener-form">
         <div class="form-group">
           <label class="label"><i class="fa-solid fa-link"></i> Enter your long URL</label>
-          <input 
-            v-model="longUrl" 
-            type="url" 
-            class="input" 
-            placeholder="https://example.com/very-long-url..." 
-            required
-          >
+          <input v-model="longUrl" type="url" class="input" placeholder="https://example.com/very-long-url..." required>
         </div>
 
         <div class="form-group">
           <label class="label"><i class="fa-solid fa-tag"></i> Custom alias (Optional)</label>
-          <input 
-            v-model="customAlias" 
-            type="text" 
-            class="input" 
-            placeholder="my-cool-link"
-          >
+          <input v-model="customAlias" type="text" class="input" placeholder="my-cool-link">
           <small class="hint">Only letters, numbers, and dashes allowed.</small>
         </div>
 
@@ -56,21 +43,17 @@
     <div class="features-grid">
       <div class="feature-card glass-panel">
         <div class="icon-box"><i class="fa-solid fa-shield-halved"></i></div>
-        <h3>Secure</h3>
-        <p>Protected against malware and phishing attacks automatically.</p>
+        <h3>Secure</h3><p>Protected against malware and phishing attacks automatically.</p>
       </div>
       <div class="feature-card glass-panel">
         <div class="icon-box"><i class="fa-solid fa-bolt"></i></div>
-        <h3>Fast</h3>
-        <p>Lightning-fast redirects powered by Redis caching.</p>
+        <h3>Fast</h3><p>Lightning-fast redirects powered by Redis caching.</p>
       </div>
       <div class="feature-card glass-panel">
         <div class="icon-box"><i class="fa-solid fa-chart-line"></i></div>
-        <h3>Analytics</h3>
-        <p>Track clicks and monitor your link performance in real-time.</p>
+        <h3>Analytics</h3><p>Track clicks and monitor your link performance in real-time.</p>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -95,7 +78,13 @@ const shortenUrl = async () => {
       short: customAlias.value
     })
     
-    shortUrl.value = response.data.short_url || response.data.result || response.data; 
+    const code = response.data.short_code || response.data.result || response.data.short || response.data;
+    
+    if (code.toString().startsWith('http')) {
+        shortUrl.value = code;
+    } else {
+        shortUrl.value = `${window.location.origin}/${code}`;
+    }
     
   } catch (err) {
     console.error(err)
