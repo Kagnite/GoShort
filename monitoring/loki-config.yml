@@ -19,11 +19,9 @@ common:
       
 storage_config:
   boltdb_shipper:
-    active_index_directory: /loki/index
+    active_index_location: /loki/index
     cache_location: /loki/cache
-    cache_migration_period: 24h
     shared_store: filesystem
-  filesystem:
     directory: /loki/chunks
 
 schema_config:
