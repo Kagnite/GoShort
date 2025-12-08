@@ -1,0 +1,44 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker-logs
+          __path__: /var/lib/docker/containers/*/*log
+    pipeline_stages:
+      - docker: {}
+      - match:
+          selector: '{container_name=~"backend-blue|backend-green"}'
+          stages:
+            - labels:
+                service: backend
+            - output:
+                source: container_name
+                drop: true
+      - match:
+          selector: '{container_name=~"postgres|redis"}'
+          stages:
+            - labels:
+                service: database
+            - output:
+                source: container_name
+                drop: true
+      - match:
+          selector: '{container_name=~"monitoring-.*"}'
+          stages:
+            - labels:
+                service: monitoring
+            - output:
+                source: container_name
+                drop: true

@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: prom/prometheus:v3.8.0
+    image: prom/prometheus:v2.50.1 
     container_name: monitoring-prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.4.0-19913286788
+    image: grafana/grafana:10.4.1 
     container_name: monitoring-grafana
     ports:
       - "3000:3000"
@@ -26,6 +26,7 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+      - loki 
 
   redis_exporter:
     image: oliver006/redis_exporter:v1.80.1
@@ -46,10 +47,37 @@ services:
       - goshort-network
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:2.9.8 
+    container_name: monitoring-loki
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/config.yml
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - goshort-network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.8 
+    container_name: monitoring-promtail
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - goshort-network
+    restart: unless-stopped
+    depends_on:
+      - loki
+
 volumes:
   prometheus_data:
   grafana_data:
-  
+  loki_data: 
+
 networks:
   goshort-network:
     external: true

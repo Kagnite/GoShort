@@ -14,6 +14,10 @@ IMAGE_BACKEND="${CI_REGISTRY_IMAGE}/backend:${TAG:-latest}"
 IMAGE_FRONTEND="${CI_REGISTRY_IMAGE}/frontend:${TAG:-latest}"
 HEALTH_CHECK_TIMEOUT=60
 HEALTH_CHECK_INTERVAL=2
+# مسیرهای فایل‌های پیکربندی
+PROD_COMPOSE_FILE="docker-compose.prod.yml"
+MONITORING_COMPOSE_FILE="docker-compose.monitoring.yml"
+COMPOSE_FILES="-f $PROD_COMPOSE_FILE -f $MONITORING_COMPOSE_FILE"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -70,12 +74,13 @@ switch_nginx() {
     echo "server backend-${target_color}:8080 max_fails=3 fail_timeout=30s;" > "${DEPLOY_PATH}/nginx/upstreams/backend_active.conf"
     
     # Find Nginx container
-    NGINX_CONTAINER=$(docker ps -a --format '{{.Names}}' | grep nginx | head -1 || true)
+    NGINX_CONTAINER=$(docker ps -a --format '{{.Names}}' | grep goshort-nginx | head -1 || true) # از goshort-nginx استفاده شد
     
     # Check Nginx status
     if [ -z "$NGINX_CONTAINER" ]; then
         log_warning "Nginx container not found, starting it..."
-        docker compose -f docker-compose.prod.yml up -d nginx
+        # استفاده از هر دو فایل در صورت نیاز به راه‌اندازی مجدد
+        docker compose $COMPOSE_FILES up -d nginx
     else
         STATUS=$(docker inspect --format='{{.State.Status}}' "$NGINX_CONTAINER" 2>/dev/null || echo "unknown")
         
@@ -85,14 +90,15 @@ switch_nginx() {
             docker stop "$NGINX_CONTAINER" || true
             docker rm -f "$NGINX_CONTAINER" || true
             sleep 2
-            docker compose -f docker-compose.prod.yml up -d nginx
+            # استفاده از هر دو فایل در صورت نیاز به راه‌اندازی مجدد
+            docker compose $COMPOSE_FILES up -d nginx
         fi
     fi
 
     log_info "Waiting for Nginx to stabilize..."
     sleep 5
     
-    NGINX_CONTAINER=$(docker ps --format '{{.Names}}' | grep nginx | head -1)
+    NGINX_CONTAINER=$(docker ps --format '{{.Names}}' | grep goshort-nginx | head -1)
 
     log_info "Testing Nginx configuration..."
     if ! docker exec "$NGINX_CONTAINER" nginx -t; then
@@ -134,9 +140,15 @@ main() {
     
     log_info "Active: $ACTIVE_COLOR | Deploying to: $INACTIVE_COLOR"
     
+    # 0. Update all Monitoring and Infrastructure services (Loki, Promtail, Postgres, Redis, etc.)
+    # این دستور تمام سرویس‌های غیر-Blue/Green را آپدیت می‌کند (شامل Loki/Promtail/Prometheus/Exporters)
+    log_info "Updating infrastructure and monitoring services..."
+    docker compose $COMPOSE_FILES up -d postgres redis prometheus grafana loki promtail postgres_exporter redis_exporter
+
     # 1. Start the NEW Backend
     log_info "Starting backend-$INACTIVE_COLOR..."
-    docker compose -f docker-compose.prod.yml up -d "backend-${INACTIVE_COLOR}"
+    # راه‌اندازی بک‌اند جدید با استفاده از هر دو فایل
+    docker compose $COMPOSE_FILES up -d "backend-${INACTIVE_COLOR}"
     
     # 2. Check Health of NEW Backend
     if ! check_health "goshort-backend-${INACTIVE_COLOR}"; then
@@ -146,9 +158,8 @@ main() {
     fi
     
     # 3. Update Frontend (MOVED UP: Before Nginx Switch)
-    # This ensures 'frontend' container exists when Nginx starts
     log_info "Updating frontend..."
-    docker compose -f docker-compose.prod.yml up -d frontend
+    docker compose $COMPOSE_FILES up -d frontend
 
     # 4. Switch Nginx
     if ! switch_nginx "$INACTIVE_COLOR"; then

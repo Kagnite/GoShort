@@ -199,8 +199,15 @@ deploy_production:
     
     # 1. Prepare files on server
     - mkdir -p /opt/goshort/nginx/upstreams
+    - mkdir -p /opt/goshort/monitoring 
+    
     - cp docker-compose.prod.yml /opt/goshort/
     - cp nginx/nginx.conf /opt/goshort/nginx/
+
+    - cp docker-compose.monitoring.yml /opt/goshort/
+    - cp monitoring/prometheus.yml /opt/goshort/monitoring/ 
+    - cp monitoring/loki-config.yml /opt/goshort/monitoring/ 
+    - cp monitoring/promtail-config.yml /opt/goshort/monitoring/ 
     
     # 2. Copy the script
     - cp deploy/scripts/blue-green-deploy.sh /opt/goshort/deploy.sh
