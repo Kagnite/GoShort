@@ -52,7 +52,7 @@ services:
     container_name: monitoring-loki
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/config.yml
-      - loki_data:/loki
+      - ./monitoring/loki_data:/loki
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/config.yml
